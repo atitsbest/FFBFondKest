@@ -86,7 +86,7 @@ namespace FFB
                 .ToDictionary(g => g.Key, g => g.ToList());
 
 			// Header schreiben.
-			Console.WriteLine("Buchungsdatum\tISIN\tTyp\tAnteile\tRücknamepreis €\tAbrechnungspreis €\tAbrechnungsbetrag €\tGewinn\tKeSt Gewinn\tKeSt-Frei\tErklärung");
+			Console.WriteLine("Buchungsdatum\tISIN\tTyp\tAnteile\tRücknamepreis €\tAbrechnungspreis €\tAbrechnungsbetrag €\tGewinn\tKeSt Gewinn\tKeSt-Frei\tErklärung(Rücknahmepreis*Anteile)");
 
             foreach (var isin in isins) {
                 _CalculateYearlyWinFor(fonds[isin]); 
@@ -132,25 +132,27 @@ namespace FFB
                         var last = depot.Peek();
                         if (last.Anteile > anteile) {
 
-                            kestErklaerung += string.Format("Kauf {2:d}: {3:C} ({0} von {4} Anteile x {1:C}) ", 
-                                anteile, 
-                                last.RuecknamepreisInEur, 
-                                last.Buchungsdatum,
-                                anteile*last.RuecknamepreisInEur,
-                                last.Anteile);
-
                             // Gewinn berechnen.
                             var kpreis = anteile * last.RuecknamepreisInEur;
                             var vpreis = anteile * t.RuecknamepreisInEur;
-                            gewinn += vpreis - kpreis;
+                            var zwischenGewinn = vpreis - kpreis;
+                            gewinn += zwischenGewinn;
                             if (last.Buchungsdatum >= kestFreiDatum)
                             {
-                                kestGewinn += vpreis - kpreis;
+                                kestGewinn += zwischenGewinn;
                             }
                             else
                             {
-                                kestFrei += vpreis - kpreis;
+                                kestFrei += zwischenGewinn;
                             }
+
+                            kestErklaerung += string.Format("Kauf {2:d}: {3:C} ({0} von {4} Anteile x {1:C}) => Gewinn: {5:C}+++", 
+                                anteile, 
+                                last.RuecknamepreisInEur, 
+                                last.Buchungsdatum,
+                                kpreis,
+                                last.Anteile,
+                                zwischenGewinn);
 
                             // Anteile aktualisieren.
                             last.Anteile -= anteile;
@@ -158,24 +160,27 @@ namespace FFB
                         }
                         else
                         {
-                            kestErklaerung += string.Format("Kauf {2:d}: {3:C} ({0} Anteile x {1:C}) ",
-                                anteile,
-                                last.RuecknamepreisInEur,
-                                last.Buchungsdatum,
-                                anteile*last.RuecknamepreisInEur);
-
                             // Gewinn berechnen.
                             var kpreis = last.Anteile * last.RuecknamepreisInEur;
                             var vpreis = last.Anteile * t.RuecknamepreisInEur;
-                            gewinn += vpreis - kpreis;
+                            var zwischenGewinn = vpreis - kpreis;
+                            gewinn += zwischenGewinn;
                             if (last.Buchungsdatum >= kestFreiDatum)
                             {
-                                kestGewinn += vpreis - kpreis;
+                                kestGewinn += zwischenGewinn;
                             }
                             else
                             {
-                                kestFrei += vpreis - kpreis;
+                                kestFrei += zwischenGewinn;
                             }
+
+                            kestErklaerung += string.Format("Kauf {2:d}: {3:C} ({0} Anteile x {1:C}) => Gewinn: {4:C}+++",
+                                last.Anteile,
+                                last.RuecknamepreisInEur,
+                                last.Buchungsdatum,
+                                kpreis,
+                                zwischenGewinn);
+
 
                             depot.Dequeue();
                             anteile -= last.Anteile;
@@ -184,10 +189,7 @@ namespace FFB
 
                     // Zum jährlichen Gewinn hinzufügen.
                     if (t.Type.Contains("entgeltbelastung")) {
-						Console.Write("\t0");
-						Console.Write("\t0");
-						Console.Write("\t0");
-						Console.WriteLine("\t");
+						Console.WriteLine("\t0\t0\t0\t");
                     }
                     else {
                         _mehrGewinn(gewinne, t, gewinn);
@@ -200,10 +202,7 @@ namespace FFB
                     }
                 }
                 else if (t.Type.Contains("kauf") || t.Type == "erträgnis") {
-					Console.Write("\t0");
-					Console.Write("\t0");
-					Console.Write("\t0");
-					Console.WriteLine("\t");
+                    Console.WriteLine("\t0\t0\t0\t");
                     depot.Enqueue(t);
                 }
             }
