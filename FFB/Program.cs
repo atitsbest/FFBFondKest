@@ -1,11 +1,9 @@
 ﻿using CsvHelper;
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 /*
 	Die generelle Steuerpflicht der Anteilscheinveräußerung ist bereits auf alle Anteilscheine anzuwenden, 
@@ -26,33 +24,35 @@ namespace FFB
     class Transaction {
         public string Type { get; set; }
         public DateTime Buchungsdatum { get; set; }
-        public string ISIN { get; set; }
+        public string Isin { get; set; }
         public decimal Anteile { get; set; }
         public decimal Abrechnungspreis { get; set; }
         public decimal Ruecknamepreis { get; set; }
         public string Currency { get; set; }
         public decimal Ausgabeaufschlage { get; set; }
-        public decimal AbrechnungsbetragInEUR { get; set; }
+        public decimal AbrechnungsbetragInEur { get; set; }
 
         public decimal Devisenkurs { get; set; }
-        public decimal RuecknamepreisInEUR { get { return Ruecknamepreis / Devisenkurs; } }
-        public decimal AbrechnungspreisInEUR { get { return Abrechnungspreis / Devisenkurs; } }
+        public decimal RuecknamepreisInEur { get { return Ruecknamepreis / Devisenkurs; } }
+        public decimal AbrechnungspreisInEur { get { return Abrechnungspreis / Devisenkurs; } }
     }
 
     class Program
     {
-        static void Main(string[] args)
+        static void Main()
         {
             var ts = new List<Transaction>();
 
             // Alles deutsch.
             System.Threading.Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
-            var config = new CsvHelper.Configuration.CsvConfiguration() {
+            var config = new CsvHelper.Configuration.CsvConfiguration
+            {
                 Delimiter = ";",
+                Encoding = Encoding.UTF8,
                 CultureInfo = new System.Globalization.CultureInfo("de-DE")
             };
 
-            var csv = new CsvReader(File.OpenText("report-20131125.csv"), config);
+            var csv = new CsvReader(File.OpenText("alle.csv"), config);
             while (csv.Read()) {
                 var type = csv.GetField<string>("Transaktion").ToLower();
 
@@ -61,45 +61,45 @@ namespace FFB
                     type.Contains("merge") ||
                     type.Contains("übertrag")) continue;
 
-				ts.Add(new Transaction() { 
+				ts.Add(new Transaction
+				{ 
 					Type = type,
 					Buchungsdatum = csv.GetField<DateTime>("Buchungsdatum"),
-					ISIN = csv.GetField<string>("ISIN"),
+					Isin = csv.GetField<string>("ISIN"),
 					Anteile = csv.GetField<decimal>("Anteile"),
 					Abrechnungspreis = csv.GetField<decimal>("Abrechnungspreis"),
 					Ruecknamepreis = csv.GetField<decimal>("Rücknahmepreis"),
 					Currency = csv.GetField<string>("Fondswährung"),
 					Devisenkurs = csv.GetField<decimal>("Devisenkurs"),
 					Ausgabeaufschlage = csv.GetField<decimal>("Ausgabeaufschlag in EUR"),
-					AbrechnungsbetragInEUR = csv.GetField<decimal>("Abrechnungsbetrag in EUR")
+					AbrechnungsbetragInEur = csv.GetField<decimal>("Abrechnungsbetrag in EUR")
 				});
             }
 
 			// Liste mit allen Fonds (ISIN) ermitteln.
-            var isins = ts.Select(t => t.ISIN).Distinct();
+            var isins = ts.Select(t => t.Isin).Distinct();
 
 			// Pro Fond einen eigenen Stack mit chronologischen Buchungen mit je 1 Anteil.
             var fonds = ts
                 .OrderBy(t => t.Buchungsdatum)
-                .GroupBy(t => t.ISIN)
+                .GroupBy(t => t.Isin)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
 			// Header schreiben.
-			Console.WriteLine("Buchungsdatum\tISIN\tTyp\tAnteile\tRücknamepreis €\tAbrechnungspreis €\tAbrechnungsbetrag €\tGewinn\tKeSt Gewinn");
+			Console.WriteLine("Buchungsdatum\tISIN\tTyp\tAnteile\tRücknamepreis €\tAbrechnungspreis €\tAbrechnungsbetrag €\tGewinn\tKeSt Gewinn\tKeSt-Frei\tErklärung");
 
-            //var isins = new string[] { "LU0255798109", "DE0008475005", "DE0009751750", "LU0055114457", "LU0212963259" };
             foreach (var isin in isins) {
-                CalculateYearlyWinFor(fonds[isin]); 
+                _CalculateYearlyWinFor(fonds[isin]); 
             }
 
         }
 
-		/// <summary>
-		/// Berechnet den Jährlichen gewinn für den übergebenen Fonds.
-		/// </summary>
-		/// <param name="isin"></param>
-		/// <returns></returns>
-        public static Dictionary<int, decimal> CalculateYearlyWinFor(IEnumerable<Transaction> transactions)
+        /// <summary>
+        /// Berechnet den Jährlichen gewinn für den übergebenen Fonds.
+        /// </summary>
+        /// <param name="transactions"></param>
+        /// <returns></returns>
+        private static Dictionary<int, decimal> _CalculateYearlyWinFor(IEnumerable<Transaction> transactions)
         {
             var gewinne = new Dictionary<int, decimal>();
             var kestGewinne = new Dictionary<int, decimal>();
@@ -111,37 +111,70 @@ namespace FFB
             
             foreach (var t in ts) {
                 Console.Write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}", 
-                    t.Buchungsdatum.ToShortDateString(), t.ISIN, t.Type, t.Anteile, t.RuecknamepreisInEUR, t.AbrechnungspreisInEUR, t.AbrechnungsbetragInEUR);
+                    t.Buchungsdatum.ToShortDateString(), t.Isin, t.Type, t.Anteile, t.RuecknamepreisInEur, t.AbrechnungspreisInEur, t.AbrechnungsbetragInEur);
                 
                 if (t.Type.Contains("verkauf") || t.Type.Contains("entgeltbelastung")) {
                     var anteile = t.Anteile;
                     var gewinn = 0.0M;
                     var kestGewinn = 0.0M;
+                    var kestFrei = 0.0M;
+                    var kestErklaerung = "";
+
+                    // Wenn das Depot leer ist, dann ist hier ein Fehler passiert, 
+                    // weil uns Käufe aus der Vergangenheit fehlen!
+                    if (!depot.Any())
+                    {
+                        Console.WriteLine("\tERROR\tERROR\tERROR\tERROR");
+                        continue;
+                    }
 
                     while (anteile > 0.0M) {
                         var last = depot.Peek();
                         if (last.Anteile > anteile) {
-                            //Console.Write("{0}*{1} ", anteile, last.RuecknamepreisInEUR);
+
+                            kestErklaerung += string.Format("Kauf {2:d}: {3:C} ({0} von {4} Anteile x {1:C}) ", 
+                                anteile, 
+                                last.RuecknamepreisInEur, 
+                                last.Buchungsdatum,
+                                anteile*last.RuecknamepreisInEur,
+                                last.Anteile);
+
                             // Gewinn berechnen.
-                            var kpreis = anteile * last.RuecknamepreisInEUR;
-                            var vpreis = anteile * t.RuecknamepreisInEUR;
+                            var kpreis = anteile * last.RuecknamepreisInEur;
+                            var vpreis = anteile * t.RuecknamepreisInEur;
                             gewinn += vpreis - kpreis;
-                            if (last.Buchungsdatum >= kestFreiDatum) {
+                            if (last.Buchungsdatum >= kestFreiDatum)
+                            {
                                 kestGewinn += vpreis - kpreis;
+                            }
+                            else
+                            {
+                                kestFrei += vpreis - kpreis;
                             }
 
                             // Anteile aktualisieren.
                             last.Anteile -= anteile;
                             anteile = 0;
                         }
-                        else {
-                            //Console.Write("{0}*{1} ", last.Anteile, last.RuecknamepreisInEUR);
+                        else
+                        {
+                            kestErklaerung += string.Format("Kauf {2:d}: {3:C} ({0} Anteile x {1:C}) ",
+                                anteile,
+                                last.RuecknamepreisInEur,
+                                last.Buchungsdatum,
+                                anteile*last.RuecknamepreisInEur);
+
                             // Gewinn berechnen.
-                            var kpreis = last.Anteile * last.RuecknamepreisInEUR;
-                            var vpreis = last.Anteile * t.RuecknamepreisInEUR;
+                            var kpreis = last.Anteile * last.RuecknamepreisInEur;
+                            var vpreis = last.Anteile * t.RuecknamepreisInEur;
                             gewinn += vpreis - kpreis;
-                            if (last.Buchungsdatum >= kestFreiDatum) {
+                            if (last.Buchungsdatum >= kestFreiDatum)
+                            {
                                 kestGewinn += vpreis - kpreis;
+                            }
+                            else
+                            {
+                                kestFrei += vpreis - kpreis;
                             }
 
                             depot.Dequeue();
@@ -152,19 +185,25 @@ namespace FFB
                     // Zum jährlichen Gewinn hinzufügen.
                     if (t.Type.Contains("entgeltbelastung")) {
 						Console.Write("\t0");
-						Console.WriteLine("\t0");
+						Console.Write("\t0");
+						Console.Write("\t0");
+						Console.WriteLine("\t");
                     }
                     else {
                         _mehrGewinn(gewinne, t, gewinn);
                         _mehrGewinn(kestGewinne, t, kestGewinn);
 
                         Console.Write("\t{0}", gewinn);
-                        Console.WriteLine("\t{0}", kestGewinn);
+                        Console.Write("\t{0}", kestGewinn);
+                        Console.Write("\t{0}", kestFrei);
+                        Console.WriteLine("\t{0}", kestErklaerung);
                     }
                 }
                 else if (t.Type.Contains("kauf") || t.Type == "erträgnis") {
 					Console.Write("\t0");
-					Console.WriteLine("\t0");
+					Console.Write("\t0");
+					Console.Write("\t0");
+					Console.WriteLine("\t");
                     depot.Enqueue(t);
                 }
             }
