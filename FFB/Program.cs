@@ -128,7 +128,7 @@ namespace FFB
                         continue;
                     }
 
-                    while (anteile > 0.0M) {
+                    while (anteile > 0.0M & depot.Count() > 0) {
                         var last = depot.Peek();
                         if (last.Anteile > anteile) {
 
@@ -188,10 +188,10 @@ namespace FFB
                     }
 
                     // Zum jährlichen Gewinn hinzufügen.
-                    if (t.Type.Contains("entgeltbelastung")) {
-						Console.WriteLine("\t0\t0\t0\t");
-                    }
-                    else {
+                    //if (t.Type.Contains("entgeltbelastung")) {
+                    //    Console.WriteLine("\t0\t0\t0\t");
+                    //}
+                    //else {
                         _mehrGewinn(gewinne, t, gewinn);
                         _mehrGewinn(kestGewinne, t, kestGewinn);
 
@@ -199,7 +199,7 @@ namespace FFB
                         Console.Write("\t{0}", kestGewinn);
                         Console.Write("\t{0}", kestFrei);
                         Console.WriteLine("\t{0}", kestErklaerung);
-                    }
+                    //}
                 }
                 else if (t.Type.Contains("kauf") || t.Type == "erträgnis") {
                     Console.WriteLine("\t0\t0\t0\t");
